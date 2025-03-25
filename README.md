@@ -1,78 +1,55 @@
-# Flask Blueprint Template 
+# Flask Application Backend
 
-This template created using this great tutorial page from Digital Ocean (👏👏👏):
+This is the backend for my FYP, built using Flask.
 
-https://www.digitalocean.com/community/tutorials/how-to-structure-large-flask-applications
+## Getting Started
 
-## Getting started 👶
-Clone this repo 
+Follow these instructions to set up and run the project on your local machine.
+
+### Prerequisites
+
+- Python 3.7 or higher
+- Git
+
+### Clone the Repository
+
 ```bash
-git clone https://github.com/cohenamitc/flask_blueprint_template.git
-cd flask_blueprint_template
+# Clone the repository
+git clone https://github.com/rashidkisejjere0784/FYP-BSE30-backend.git
+
+# Navigate to the project directory
+cd FYP-BSE30-backend
 ```
-***
-Create and activate virtual environment
+
+### Setting Up a Virtual Environment
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+# Create a virtual environment
+python -m venv venv
+
+# Activate the virtual environment
+# On Windows
+venv\Scripts\activate
+# On macOS/Linux
+source venv/bin/activate
 ```
-***
-Install libraries
+
+### Installing Dependencies
+
 ```bash
-pip3 install -r requirements.txt
+# Install required packages
+pip install -r requirements.txt
 ```
-***
-Run this to test everything is working
+
+### Running the Application
+
 ```bash
-python3 run.py
-```
-***
-Open web browser session to `http://127.0.0.1:5000/api/status` to verify that everything is working
-
-## Our App Structure ↘️
-
-```
-📦flask_blueprint_template
- ┣ 📂app
- ┃ ┣ 📂api
- ┃ ┃ ┣ 📜controllers.py
- ┃ ┃ ┗ 📜__init__.py
- ┃ ┣ 📂auth
- ┃ ┃ ┣ 📜controllers.py
- ┃ ┃ ┣ 📜forms.py
- ┃ ┃ ┣ 📜models.py
- ┃ ┃ ┗ 📜__init__.py
- ┃ ┣ 📂static
- ┃ ┣ 📂templates
- ┃ ┃ ┣ 📂auth
- ┃ ┃ ┃ ┣ 📜register.html
- ┃ ┃ ┃ ┣ 📜signin.html
- ┃ ┃ ┃ ┗ 📜signout.html
- ┃ ┃ ┗ 📜404.html
- ┃ ┗ 📜__init__.py
- ┣ 📂scripts
- ┃ ┗ 📜secret_generator.py
- ┣ 📜app.db
- ┣ 📜config.py
- ┣ 📜requirements.txt
- ┗ 📜run.py
+# Start the Flask server
+python run.py
 ```
 
-## Useful Scripts 📜
+The application should now be running on `http://localhost:5000` (or the port specified in your configuration).
 
-Generate Flask Secrets
+## License
 
-`python3 scripts/secret_generator.py`
-
-## More Resources 👩‍🎓
-### Flask 🌐
-https://flask.palletsprojects.com/en/2.0.x/
-
-### Flask-WTF 📝
-https://flask-wtf.readthedocs.io/en/0.15.x/
-
-### Flask-SQLAlchemy 📅
-https://flask-sqlalchemy.palletsprojects.com/en/2.x/
-
-***
-Happy coding! 🧑‍💻
+This project is licensed under the MIT License - see the LICENSE file for details.
