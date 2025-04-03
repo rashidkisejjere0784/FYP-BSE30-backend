@@ -18,16 +18,14 @@ def api_status():
 @api_bp.route('/add_data', methods=['POST'])
 def read_data():
     try:
-        data = request.get_json()
-        # Extract values from JSON data
+        # Use form data if the content type is URL-encoded
+        ph = float(request.form.get('ph', 0))
+        turbidity = float(request.form.get('turbidity', 0))
+        conductivity = float(request.form.get('conductivity', 0))
+        temperature = float(request.form.get('temperature', 0))
         timestamp = datetime.now()
-        ph = float(data.get('ph', 0))
-        turbidity = float(data.get('turbidity', 0))
-        conductivity = float(data.get('conductivity', 0))
-        temperature = float(data.get('temperature', 0))
         predicted_potability = 0
 
-        # Create a new row as a dictionary
         new_row = {
             'Timestamp': timestamp,
             'ph': ph,
@@ -37,16 +35,20 @@ def read_data():
             'predicted_potability': predicted_potability
         }
 
-        # Append the new row to the global DataFrame
         global recorded_data
         recorded_data = pd.concat([recorded_data, pd.DataFrame([new_row])], ignore_index=True)
 
-        # Include the data in the response
-        data['timestamp'] = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-        return jsonify(data)
+        # Prepare a JSON response that includes a timestamp
+        return jsonify({
+            'ph': ph,
+            'turbidity': turbidity,
+            'conductivity': conductivity,
+            'temperature': temperature,
+            'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S')
+        })
     
     except Exception as e:
-        return jsonify(error=str(e))
+        return jsonify({'error': str(e)}), 500
     
     
 @api_bp.route('/ml_model', methods=['POST'])
