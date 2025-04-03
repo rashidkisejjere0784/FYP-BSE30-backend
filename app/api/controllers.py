@@ -15,14 +15,18 @@ scaler = joblib.load('utils/feature_scaler.pkl')
 def api_status():
     return jsonify(status='ok')
 
+
 @api_bp.route('/add_data', methods=['POST'])
 def read_data():
     try:
-        # Use form data if the content type is URL-encoded
-        ph = float(request.form.get('ph', 0))
-        turbidity = float(request.form.get('turbidity', 0))
-        conductivity = float(request.form.get('conductivity', 0))
-        temperature = float(request.form.get('temperature', 0))
+        # Get data from JSON request body
+        data = request.get_json()
+        
+        # Extract values from JSON
+        ph = float(data.get('ph', 0))
+        turbidity = float(data.get('turbidity', 0))
+        conductivity = float(data.get('conductivity', 0))
+        temperature = float(data.get('temperature', 0))
         timestamp = datetime.now()
         predicted_potability = 0
 
@@ -49,7 +53,6 @@ def read_data():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
     
 @api_bp.route('/ml_model', methods=['POST'])
 def ml_model():
