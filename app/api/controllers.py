@@ -123,3 +123,15 @@ def forecast():
     
     except Exception as e:
         return jsonify({"error": str(e)})
+    
+@api_bp.route('/get_data', methods=['GET'])
+def get_data():
+    try:
+        # Convert the DataFrame to a list of dictionaries
+        data = recorded_data.to_dict(orient='records')
+        
+        # Return the data as JSON
+        return jsonify(data)
+    
+    except Exception as e:
+        return jsonify(error=str(e))
