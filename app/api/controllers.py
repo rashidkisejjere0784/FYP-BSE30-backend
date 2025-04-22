@@ -104,13 +104,15 @@ def forecast():
             # Fit ARIMA model - using simple (1,1,1) parameters
             # In production, you might want to use auto_arima to find optimal parameters
             model = ARIMA(series, order=(1, 1, 1))
+            print(f"Fitting ARIMA model for {feature}...")
             model_fit = model.fit()
             
             # Make forecast
             forecast = model_fit.forecast(steps=forecast_periods)
+            print(f"Forecasted {forecast} periods ahead for {feature}...")
             
             # Store forecasted values
-            results[feature] = forecast.tolist()
+            results[feature] = forecast
         
         # Add timestamp information
         last_timestamp = recorded_data['Timestamp'].iloc[-1]
@@ -124,9 +126,14 @@ def forecast():
         
         results['timestamps'] = forecast_timestamps
         
-        return jsonify(results)
+        results = pd.DataFrame(results)
+        results['timestamps'] = pd.to_datetime(results['timestamps'])
+        
+        return jsonify(results.to_json())
     
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)})
     
 @api_bp.route('/get_data', methods=['GET'])
