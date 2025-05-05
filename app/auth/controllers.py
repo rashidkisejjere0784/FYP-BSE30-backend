@@ -1,15 +1,11 @@
 # Import flask dependencies
-from flask import Blueprint, request, render_template, \
-                  flash, g, session, redirect, url_for
+from flask import Blueprint, request
 
 # Import password / encryption helper tools
 from werkzeug.security import check_password_hash, generate_password_hash
 
 # Import the database object from the main app module
 from app import db
-
-# Import module forms
-from app.auth.forms import LoginForm
 
 # Import module models (i.e. User)
 from app.auth.models import User
@@ -20,23 +16,74 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 # Set the route and accepted methods
 @auth_bp.route('/signin/', methods=['GET', 'POST'])
 def signin():
+    if request.method == 'POST':
+        # Get the post data
+        post_data = request.get_json()
+        username = post_data.get('username')
+        password = post_data.get('password')
 
-    # If sign in form is submitted
-    form = LoginForm(request.form)
+        # Query the database for a user with the provided username
+        user = User.query.filter_by(name=username).first()
 
-    # Verify the sign in form
-    if form.validate_on_submit():
+        # Check if the user exists and if the password is correct
+        if user and check_password_hash(user.password, password):
+            return {
+                'message': 'Login successful',
+                'user': {
+                    'username': user.name,
+                    'email': user.email,
+                    'location': user.location,
+                    'id': user.id,
+                    'date_created': user.date_created,
+                    'date_modified': user.date_modified
+                }
+                }, 200
+        else:
+            return {'message': 'Invalid username or password'}, 401
 
-        user = User.query.filter_by(email=form.email.data).first()
+    return {'message': 'Method not allowed'}, 405
 
-        if user and check_password_hash(user.password, form.password.data):
 
-            session['user_id'] = user.id
+@auth_bp.route('/signup/', methods=['POST'])
+def signup():
+    if request.method == 'POST':
+        # Get the post data
+        post_data = request.get_json()
+        username = post_data.get('username')
+        password = post_data.get('password')
+        location = post_data.get('location')
+        email = post_data.get('email')
+        check_password = post_data.get('check_password')
+        
+        # Validate the input data
+        if check_password != password:
+            return {'message': 'Invalid User or Password'}, 400
 
-            flash('Welcome %s' % user.name)
+        # Check if the user already exists
+        existing_user = User.query.filter_by(name=username).first()
+        if existing_user:
+            return {
+                'message': 'User already exists'
+                }, 409
 
-            return redirect(url_for('auth.home'))
+        # Create a new user
+        new_user = User(name=username,
+                        password=generate_password_hash(password),
+                        location=location, email=email,)
+        
+        db.session.add(new_user)
+        db.session.commit()
 
-        flash('Wrong email or password', 'error-message')
+        return {
+            'message': 'User created successfully',
+            'user': {
+                'username': new_user.name,
+                'email': new_user.email,
+                'location': new_user.location,
+                'id': new_user.id,
+                'date_created': new_user.date_created,
+                'date_modified': new_user.date_modified
+            }
+            }, 201
 
-    return render_template("auth/signin.html", form=form)
+    return {'message': 'Method not allowed'}, 405
