@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from statsmodels.tsa.arima.model import ARIMA
+from datetime import timedelta
 
 recorded_data = pd.DataFrame(columns=['Timestamp', 'ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability'])
 api_bp = Blueprint('api', __name__)
@@ -86,56 +87,89 @@ def ml_model():
 @api_bp.route('/forecast', methods=["POST"])
 def forecast():
     try:
-        global recorded_data
+        global recorded_data # Make sure this DataFrame is populated and 'Timestamp' is datetime
         
-        if len(recorded_data) < 10:  # Need sufficient data for forecasting
-            return jsonify({"error": "Not enough data for forecasting. Need at least 10 data points."})
+        if not isinstance(recorded_data, pd.DataFrame) or recorded_data.empty:
+            return jsonify({"error": "No data available for forecasting. The 'recorded_data' DataFrame is empty or not initialized."}), 400
         
-        # Number of time periods to forecast
+        if 'Timestamp' not in recorded_data.columns or not pd.api.types.is_datetime64_any_dtype(recorded_data['Timestamp']):
+            return jsonify({"error": "Timestamp column is missing or not in datetime format in recorded_data."}), 400
+
+        if len(recorded_data) < 10:
+            return jsonify({"error": f"Not enough data for forecasting. Need at least 10 data points, got {len(recorded_data)}."}), 400
+        
         forecast_periods = request.json.get('periods', 5)
+        if not isinstance(forecast_periods, int) or forecast_periods <= 0:
+            return jsonify({"error": "Invalid 'periods' value. Must be a positive integer."}), 400
+
+        results_dict = {}
+        features_to_forecast = ['ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability']
         
-        results = {}
-        features = ['ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability']
-        
-        for feature in features:
-            # Convert data to time series
+        # Ensure all features exist in the dataframe
+        for feature in features_to_forecast:
+            if feature not in recorded_data.columns:
+                return jsonify({"error": f"Feature '{feature}' not found in recorded data."}), 400
+
+        for feature in features_to_forecast:
             series = recorded_data[feature].values
             
-            # Fit ARIMA model - using simple (1,1,1) parameters
-            # In production, you might want to use auto_arima to find optimal parameters
-            model = ARIMA(series, order=(1, 1, 1))
-            print(f"Fitting ARIMA model for {feature}...")
-            model_fit = model.fit()
+            # ARIMA model can fail with constant series or other issues.
+            try:
+                # Using a simple order; consider auto_arima or specific orders per feature
+                # SARIMAX might be better if seasonality is present.
+                model = ARIMA(series, order=(1,1,1), enforce_stationarity=False, enforce_invertibility=False)
+                print(f"Fitting ARIMA model for {feature}...")
+                model_fit = model.fit()
+                forecast_values = model_fit.forecast(steps=forecast_periods)
+                # ARIMA forecast returns a NumPy array. Convert to list of native Python floats.
+                # Convert to dictionary with string keys '0', '1', ...
+                results_dict[feature] = {str(i): float(val) for i, val in enumerate(forecast_values)}
+            except Exception as e:
+                print(f"Error fitting ARIMA for {feature}: {e}")
+                return jsonify({"error": f"Could not forecast {feature}. ARIMA model fitting failed: {str(e)}"}), 500
+        
+        # Generate future timestamps
+        # Timestamps should be in milliseconds since epoch for JavaScript Date compatibility
+        forecast_timestamps_ms = {}
+        if not recorded_data['Timestamp'].empty:
+            last_timestamp_dt = recorded_data['Timestamp'].iloc[-1] # This is a pandas Timestamp object
             
-            # Make forecast
-            forecast = model_fit.forecast(steps=forecast_periods)
-            print(f"Forecasted {forecast} periods ahead for {feature}...")
-            
-            # Store forecasted values
-            results[feature] = forecast
+            avg_timedelta_seconds = 0
+            if len(recorded_data) > 1:
+                # Calculate average difference in seconds
+                time_diffs = recorded_data['Timestamp'].diff().dropna()
+                if not time_diffs.empty:
+                    avg_timedelta_seconds = time_diffs.mean().total_seconds()
+                else: # only one historical point after diff
+                    avg_timedelta_seconds = 20 # Default to 20s if only one diff possible or no diff
+            else: # only one historical point
+                avg_timedelta_seconds = 20 # Default to 20s if only one point
+
+            if avg_timedelta_seconds <= 0: # Ensure positive timedelta
+                avg_timedelta_seconds = 20
+
+
+            for i in range(forecast_periods):
+                # Calculate next timestamp by adding average timedelta
+                next_timestamp_dt = last_timestamp_dt + timedelta(seconds=(i + 1) * avg_timedelta_seconds)
+                # Convert to milliseconds since epoch
+                forecast_timestamps_ms[str(i)] = int(next_timestamp_dt.timestamp() * 1000)
+        else:
+             # Fallback if somehow timestamps are empty (should have been caught earlier)
+            current_time_ms = int(pd.Timestamp.now().timestamp() * 1000)
+            for i in range(forecast_periods):
+                forecast_timestamps_ms[str(i)] = current_time_ms + (i + 1) * 20000 # Default to 20s interval
+
+        results_dict['timestamps'] = forecast_timestamps_ms
         
-        # Add timestamp information
-        last_timestamp = recorded_data['Timestamp'].iloc[-1]
-        forecast_timestamps = []
-        
-        # Generate future timestamps based on average time difference
-        if len(recorded_data) > 1:
-            avg_timedelta = (recorded_data['Timestamp'].iloc[-1] - recorded_data['Timestamp'].iloc[0]) / (len(recorded_data) - 1)
-            for i in range(1, forecast_periods + 1):
-                forecast_timestamps.append((last_timestamp + i * avg_timedelta).strftime('%Y-%m-%d %H:%M:%S'))
-        
-        results['timestamps'] = forecast_timestamps
-        
-        results = pd.DataFrame(results)
-        results['timestamps'] = pd.to_datetime(results['timestamps'])
-        
-        return jsonify(results.to_json())
-    
+        return jsonify(results_dict)
+
     except Exception as e:
+        print(f"An unexpected error occurred in /forecast: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)})
-    
+        return jsonify({"error": f"An internal server error occurred: {str(e)}"}), 500
+
 @api_bp.route('/get_data', methods=['GET'])
 def get_data():
     try:

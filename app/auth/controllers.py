@@ -14,7 +14,7 @@ from app.auth.models import User
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 # Set the route and accepted methods
-@auth_bp.route('/signin/', methods=['GET', 'POST'])
+@auth_bp.route('/signin/', methods=['GET', 'POST'], strict_slashes=False)
 def signin():
     if request.method == 'POST':
         # Get the post data
@@ -44,7 +44,7 @@ def signin():
     return {'message': 'Method not allowed'}, 405
 
 
-@auth_bp.route('/signup/', methods=['POST'])
+@auth_bp.route('/signup/', methods=['POST'], strict_slashes=False)
 def signup():
     if request.method == 'POST':
         # Get the post data
