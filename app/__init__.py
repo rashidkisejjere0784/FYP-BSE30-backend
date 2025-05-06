@@ -1,17 +1,21 @@
-# Import flask and template operators
+# Import flask, template operators, and CORS
 from flask import Flask, render_template
-
-# Import SQLAlchemy
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 
 # Define the WSGI application object
 app = Flask(__name__)
 
-# Configurations
+# Load configurations
 app.config.from_object('config')
 
-# Define the database object which is imported
-# by modules and controllers
+# Enable CORS only on /api/* endpoints
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# Or, to enable CORS globally on all routes:
+# CORS(app)
+
+# Define the database object
 db = SQLAlchemy(app)
 
 # Sample HTTP error handling
@@ -19,17 +23,13 @@ db = SQLAlchemy(app)
 def not_found(error):
     return render_template('404.html'), 404
 
-# Import a module / component using its blueprint handler variable (mod_auth)
+# Import and register blueprints
 from app.auth.controllers import auth_bp as auth_module
-from app.api.controllers import api_bp as api_module
+from app.api.controllers  import api_bp  as api_module
 
-# Register blueprint(s)
 app.register_blueprint(auth_module)
 app.register_blueprint(api_module, url_prefix='/api')
-# app.register_blueprint(xyz_module)
 
-# Build the database:
-# This will create the database file using SQLAlchemy
-
+# Build the database
 with app.app_context():
     db.create_all()
