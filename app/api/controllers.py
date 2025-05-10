@@ -5,6 +5,8 @@ import numpy as np
 from datetime import datetime
 from statsmodels.tsa.arima.model import ARIMA
 from datetime import timedelta
+import json
+
 
 recorded_data = pd.DataFrame(columns=['Timestamp', 'ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability'])
 api_bp = Blueprint('api', __name__)
@@ -16,14 +18,20 @@ scaler = joblib.load('utils/feature_scaler.pkl')
 def api_status():
     return jsonify(status='ok')
 
-
 @api_bp.route('/add_data', methods=['POST'])
 def read_data():
     try:
-        # Get data from JSON request body
-        data = request.get_json()
-        
-        # Extract values from JSON
+        # Get the raw body as bytes, then decode to string
+        raw_data = request.get_data(as_text=True)
+
+
+        # parse data as JSON if you expect it to be JSON
+        try:
+            data = json.loads(raw_data)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid JSON'}), 400
+
+        # Extract values
         ph = float(data.get('ph', 0))
         turbidity = float(data.get('turbidity', 0))
         conductivity = float(data.get('conductivity', 0))
@@ -42,8 +50,7 @@ def read_data():
 
         global recorded_data
         recorded_data = pd.concat([recorded_data, pd.DataFrame([new_row])], ignore_index=True)
-
-        # Prepare a JSON response that includes a timestamp
+        print("Recorded Global data received:", recorded_data)
         return jsonify({
             'ph': ph,
             'turbidity': turbidity,
@@ -51,10 +58,10 @@ def read_data():
             'temperature': temperature,
             'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S')
         })
-    
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+
 @api_bp.route('/ml_model', methods=['POST'])
 def ml_model():
     try:
