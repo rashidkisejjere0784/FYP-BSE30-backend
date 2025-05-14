@@ -1,8 +1,8 @@
 import os
 
-from app import app
+from app import app, socketio
 
 port = int(os.environ.get("FLASK_PORT", 5000))
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=port)
+    socketio.run(app,host='0.0.0.0', port=port)
