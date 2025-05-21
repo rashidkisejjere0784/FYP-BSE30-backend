@@ -6,7 +6,7 @@ from datetime import datetime
 from statsmodels.tsa.arima.model import ARIMA
 from datetime import timedelta
 import json
-from app import socketio
+# from app import socketio
 
 
 recorded_data = pd.DataFrame(columns=['Timestamp', 'ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability'])
@@ -56,13 +56,13 @@ def read_data():
         print("Recorded Global data received:", recorded_data)
 
         # now emit the socket event to read data in real time
-        socketio.emit('new_data', {
-            'ph': ph,
-            'turbidity': turbidity,
-            'conductivity': conductivity,
-            'temperature': temperature,
-            'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S')
-        })
+        # socketio.emit('new_data', {
+        #     'ph': ph,
+        #     'turbidity': turbidity,
+        #     'conductivity': conductivity,
+        #     'temperature': temperature,
+        #     'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S')
+        # })
 
         return jsonify({
             'ph': ph,

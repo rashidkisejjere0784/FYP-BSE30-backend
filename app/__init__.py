@@ -1,13 +1,13 @@
 from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+# from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
 app.config.from_object("config")
 
 # socketio
-socketio = SocketIO(app, cors_allowed_origins="*")
+# socketio = SocketIO(app, cors_allowed_origins="*")
 
 # enable CORS on both /api/* and /auth/*:
 CORS(app, resources={
