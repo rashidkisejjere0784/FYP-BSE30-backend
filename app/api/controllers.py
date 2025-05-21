@@ -116,7 +116,7 @@ def read_data():
 
 
         global recorded_data
-        recorded_data = pd.concat([recorded_data, pd.DataFrame([new_row])], ignore_index=True)
+        recorded_data = pd.concat([recorded_data, pd.DataFrame([new_row])], ignore_index=True, axis=0)
         print("Recorded Global data received:", recorded_data)
 
         # now emit the socket event to read data in real time
