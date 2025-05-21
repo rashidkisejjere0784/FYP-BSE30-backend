@@ -9,7 +9,7 @@ import json
 # from app import socketio
 
 
-recorded_data = pd.DataFrame(columns=['Timestamp', 'ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability'])
+recorded_data = pd.read_csv("./recorded_data.csv")
 api_bp = Blueprint('api', __name__)
 model = joblib.load('utils/potability model.model')
 scaler = joblib.load('utils/feature_scaler.pkl')
@@ -135,7 +135,6 @@ def forecast():
             # ARIMA model can fail with constant series or other issues.
             try:
                 # Using a simple order; consider auto_arima or specific orders per feature
-                # SARIMAX might be better if seasonality is present.
                 model = ARIMA(series, order=(1,1,1), enforce_stationarity=False, enforce_invertibility=False)
                 print(f"Fitting ARIMA model for {feature}...")
                 model_fit = model.fit()
