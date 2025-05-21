@@ -33,8 +33,8 @@ def read_data():
             return jsonify({'error': 'Invalid JSON'}), 400
 
         # Extract values
-        ph = float(data.get('ph', 0))
-        turbidity = float(data.get('turbidity', 0))
+        ph_value = float(data.get('ph', 0))
+        turbidity_level = float(data.get('turbidity', 0))
         conductivity = float(data.get('conductivity', 0))
         temperature = float(data.get('temperature', 0))
         timestamp = datetime.now()
@@ -42,8 +42,8 @@ def read_data():
 
         new_row = {
             'Timestamp': timestamp,
-            'ph': ph,
-            'Turbidity': turbidity,
+            'ph': ph_value,
+            'Turbidity': turbidity_level,
             'Conductivity': conductivity,
             'temperature': temperature,
             'predicted_potability': predicted_potability
@@ -64,8 +64,8 @@ def read_data():
         # })
 
         return jsonify({
-            'ph': ph,
-            'turbidity': turbidity,
+            'ph': ph_value,
+            'turbidity': turbidity_level,
             'conductivity': conductivity,
             'temperature': temperature,
             'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S')
