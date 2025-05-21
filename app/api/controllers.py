@@ -151,7 +151,7 @@ def ml_model():
         data = scaler.transform(data[['ph', 'Conductivity', 'Turbidity']])
         
         # Predict the potability of the water
-        predicted_potability = model.predict(data)
+        predicted_potability = model.predict_proba(data)
         
         # Update the global DataFrame with the predicted potability
         recorded_data['predicted_potability'] = predicted_potability
