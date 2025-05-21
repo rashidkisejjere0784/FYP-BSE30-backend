@@ -116,8 +116,14 @@ def read_data():
 
 
         global recorded_data
-        recorded_data = pd.concat([recorded_data, pd.DataFrame([new_row])], ignore_index=True, axis=0)
-        print("Recorded Global data received:", recorded_data)
+        new_df = pd.DataFrame([new_row])
+
+        if list(new_df.columns) != list(recorded_data.columns):
+            # reorder, drop extras, or explicitly re-index
+            new_df = new_df.reindex(columns=recorded_data.columns)
+
+        # 2) concatenate
+        recorded_data = pd.concat([recorded_data, new_df], ignore_index=True)
 
         # now emit the socket event to read data in real time
         # socketio.emit('new_data', {
