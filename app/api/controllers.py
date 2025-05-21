@@ -9,7 +9,7 @@ import json
 # from app import socketio
 
 
-recorded_data = pd.read_csv("./recorded_data.csv")
+recorded_data = pd.read_csv("recorded_data.csv")
 api_bp = Blueprint('api', __name__)
 model = joblib.load('utils/potability model.model')
 scaler = joblib.load('utils/feature_scaler.pkl')
