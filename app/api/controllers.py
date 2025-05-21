@@ -99,7 +99,7 @@ def read_data():
         
         # validate the ph value, if it is greater than 14, change the value to a random value be between 10 and 14, if it is less than 0, change the value to a random value between 0 and 4
         if ph_value > 14:
-            ph_value = np.random.uniform(10, 14)
+            ph_value = np.random.uniform(11, 14)
         elif ph_value < 0:
             ph_value = np.random.uniform(0, 4)
 
