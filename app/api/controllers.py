@@ -102,6 +102,8 @@ def read_data():
             ph_value = np.random.uniform(11, 14)
         elif ph_value < 0:
             ph_value = np.random.uniform(0, 4)
+            
+        print(ph_value)
 
         new_row = {
             'Timestamp': timestamp,
@@ -135,7 +137,9 @@ def read_data():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        from traceback import format_exc
+        print("Error in /add_data:", format_exc())
+        return jsonify({'error': str(e) + " " + format_exc()}), 500
 
 @api_bp.route('/ml_model', methods=['POST'], strict_slashes=False)
 def ml_model():
