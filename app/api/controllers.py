@@ -50,7 +50,6 @@ def read_data():
         }
 
 
-
         global recorded_data
         recorded_data = pd.concat([recorded_data, pd.DataFrame([new_row])], ignore_index=True)
         print("Recorded Global data received:", recorded_data)
