@@ -76,7 +76,7 @@ scaler = joblib.load('utils/feature_scaler.pkl')
 def api_status():
     return jsonify(status='ok')
 
-@api_bp.route('/add_data', methods=['POST'])
+@api_bp.route('/add_data', methods=['POST'], strict_slashes=False)
 def read_data():
     try:
         # Get the raw body as bytes, then decode to string
@@ -96,6 +96,12 @@ def read_data():
         temperature = float(data.get('temperature', 0))
         timestamp = datetime.now()
         predicted_potability = 0
+        
+        # validate the ph value, if it is greater than 14, change the value to a random value be between 10 and 14, if it is less than 0, change the value to a random value between 0 and 4
+        if ph_value > 14:
+            ph_value = np.random.uniform(10, 14)
+        elif ph_value < 0:
+            ph_value = np.random.uniform(0, 4)
 
         new_row = {
             'Timestamp': timestamp,
@@ -131,7 +137,7 @@ def read_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@api_bp.route('/ml_model', methods=['POST'])
+@api_bp.route('/ml_model', methods=['POST'], strict_slashes=False)
 def ml_model():
     try:
         # Load the data from the global DataFrame
@@ -160,7 +166,7 @@ def ml_model():
         return jsonify(error=str(e))
 
 
-@api_bp.route('/forecast', methods=["POST"])
+@api_bp.route('/forecast', methods=["POST"], strict_slashes=False)
 def forecast():
     try:
         global recorded_data # Make sure this DataFrame is populated and 'Timestamp' is datetime
@@ -245,7 +251,7 @@ def forecast():
         traceback.print_exc()
         return jsonify({"error": f"An internal server error occurred: {str(e)}"}), 500
 
-@api_bp.route('/get_data', methods=['GET'])
+@api_bp.route('/get_data', methods=['GET'], strict_slashes=False)
 def get_data():
     try:
         # Convert the DataFrame to a list of dictionaries
