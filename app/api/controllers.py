@@ -7,8 +7,9 @@ from statsmodels.tsa.arima.model import ARIMA
 from datetime import timedelta
 import json
 from io import StringIO
+import traceback # Import traceback for better error logging
 
-
+# Load initial data
 data = """Timestamp	ph	Turbidity	Conductivity	temperature	predicted_potability
 01/04/2025	6.511618075	4.850433708	475.3413507	23.63438487	0
 02/04/2025	2.803563057	3.489938597	447.594219	24.36289103	0
@@ -50,6 +51,7 @@ data = """Timestamp	ph	Turbidity	Conductivity	temperature	predicted_potability
 """
 
 # ——— 2. Read into DataFrame, parsing dates with day-first ———
+# Use pd.read_csv with StringIO to read the string data as if it were a file
 recorded_data = pd.read_csv(
     StringIO(data),
     sep='\t',
@@ -58,18 +60,33 @@ recorded_data = pd.read_csv(
 )
 
 # ——— 3. Ensure proper dtypes ———
-recorded_data = recorded_data.astype({
+# Get the target dtypes from the initial data load
+target_dtypes = {
     'ph': float,
     'Turbidity': float,
     'Conductivity': float,
     'temperature': float,
     'predicted_potability': int
-})
+}
+recorded_data = recorded_data.astype(target_dtypes)
 
 
 api_bp = Blueprint('api', __name__)
-model = joblib.load('utils/potability model.model')
-scaler = joblib.load('utils/feature_scaler.pkl')
+
+# Load models - ensure these paths are correct relative to where your app runs
+try:
+    model = joblib.load('utils/potability model.model')
+    scaler = joblib.load('utils/feature_scaler.pkl')
+except FileNotFoundError as e:
+    print(f"Error loading model or scaler: {e}")
+    print("Please ensure 'utils/potability model.model' and 'utils/feature_scaler.pkl' exist.")
+    # In a real app, you might want to exit or handle this more gracefully
+    model = None
+    scaler = None
+except Exception as e:
+    print(f"An unexpected error occurred loading models: {e}")
+    model = None
+    scaler = None
 
 
 @api_bp.route('/status')
@@ -78,34 +95,41 @@ def api_status():
 
 @api_bp.route('/add_data', methods=['POST'], strict_slashes=False)
 def read_data():
+    global recorded_data # Declare intent to modify the global variable
+
     try:
         # Get the raw body as bytes, then decode to string
         raw_data = request.get_data(as_text=True)
 
-
-        # parse data as JSON if you expect it to be JSON
+        # parse data as JSON
         try:
             data = json.loads(raw_data)
         except json.JSONDecodeError:
             return jsonify({'error': 'Invalid JSON'}), 400
 
-        # Extract values
-        ph_value = float(data.get('ph', 0))
-        turbidity_level = float(data.get('turbidity', 0))
-        conductivity = float(data.get('conductivity', 0))
-        temperature = float(data.get('temperature', 0))
-        timestamp = datetime.now()
-        predicted_potability = 0
-        
-        # validate the ph value, if it is greater than 14, change the value to a random value be between 10 and 14, if it is less than 0, change the value to a random value between 0 and 4
-        if ph_value > 14:
-            ph_value = np.random.uniform(11, 14)
-        elif ph_value < 0:
-            ph_value = np.random.uniform(0, 4)
-            
-        print(ph_value)
+        # Extract and validate values
+        # Use .get() with a default to avoid KeyError if keys are missing
+        try:
+            ph_value = float(data.get('ph', 0))
+            turbidity_level = float(data.get('turbidity', 0))
+            conductivity = float(data.get('conductivity', 0))
+            temperature = float(data.get('temperature', 0))
+        except (ValueError, TypeError) as e:
+             return jsonify({'error': f'Invalid data type for one or more parameters: {e}'}), 400
 
-        new_row = {
+
+        timestamp = datetime.now()
+        predicted_potability = 0 # Default value before ML prediction
+
+        # validate the ph value (optional, but good practice)
+        # Added checks to ensure valid float output
+        if ph_value > 14:
+            ph_value = float(np.random.uniform(11, 14)) # Ensure float
+        elif ph_value < 0:
+            ph_value = float(np.random.uniform(0, 4)) # Ensure float
+
+        # Prepare the new row as a dictionary
+        new_row_dict = {
             'Timestamp': timestamp,
             'ph': ph_value,
             'Turbidity': turbidity_level,
@@ -114,25 +138,21 @@ def read_data():
             'predicted_potability': predicted_potability
         }
 
+        # Create a DataFrame for the new row
+        new_df = pd.DataFrame([new_row_dict])
 
-        global recorded_data
-        new_df = pd.DataFrame([new_row])
+        # Ensure columns and their order match recorded_data
+        # This also handles potential missing columns in new_df by adding them with NaN
+        if recorded_data is None or recorded_data.empty:
+             print("Error: recorded_data is not initialized correctly.")
+             return jsonify({"error": "Internal server error: Data storage not initialized."}), 500
 
-        if list(new_df.columns) != list(recorded_data.columns):
-            # reorder, drop extras, or explicitly re-index
-            new_df = new_df.reindex(columns=recorded_data.columns)
 
-        # 2) concatenate
+        new_df = new_df.reindex(columns=recorded_data.columns)
+
+        new_df = new_df.astype(target_dtypes)
+
         recorded_data = pd.concat([recorded_data, new_df], ignore_index=True)
-
-        # now emit the socket event to read data in real time
-        # socketio.emit('new_data', {
-        #     'ph': ph,
-        #     'turbidity': turbidity,
-        #     'conductivity': conductivity,
-        #     'temperature': temperature,
-        #     'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S')
-        # })
 
         return jsonify({
             'ph': ph_value,
@@ -143,132 +163,213 @@ def read_data():
         })
 
     except Exception as e:
-        from traceback import format_exc
-        print("Error in /add_data:", format_exc())
-        return jsonify({'error': str(e) + " " + format_exc()}), 500
+        # Log the full traceback for debugging
+        error_trace = traceback.format_exc()
+        print(f"Error in /add_data: {error_trace}")
+        return jsonify({'error': f'An internal server error occurred: {str(e)}', 'traceback': error_trace}), 500
 
 @api_bp.route('/ml_model', methods=['POST'], strict_slashes=False)
 def ml_model():
+    global recorded_data # Ensure we modify the global variable
+
+    if model is None or scaler is None:
+        return jsonify({"error": "ML model or scaler not loaded correctly. Cannot perform prediction."}), 500
+
     try:
-        # Load the data from the global DataFrame
-        global recorded_data
-        data = recorded_data.copy()
-        
-        # Drop the timestamp column
-        data = data.drop(columns=['Timestamp', 'predicted_potability', 'temperature'])
-        
-        #scale the data
-        data = scaler.transform(data[['ph', 'Conductivity', 'Turbidity']])
-        
-        # Predict the potability of the water
-        predicted_potability = model.predict_proba(data)
-        
-        # Update the global DataFrame with the predicted potability
-        recorded_data['predicted_potability'] = predicted_potability
-        
-        # Include the predicted potability in the response
-        response = recorded_data.to_dict(orient='records')
-        return jsonify(response)
-    
+        # Check if there's data to process
+        if recorded_data is None or recorded_data.empty:
+            return jsonify({"message": "No data recorded yet to process."}), 200 # Or 404/400 depending on desired behavior
+
+        # Make a copy to avoid modifying recorded_data while dropping/scaling
+        data_copy = recorded_data.copy()
+
+        # Check for required columns before dropping
+        required_features = ['ph', 'Conductivity', 'Turbidity']
+        if not all(f in data_copy.columns for f in required_features):
+             missing = [f for f in required_features if f not in data_copy.columns]
+             return jsonify({"error": f"Missing required features for ML prediction: {missing}"}), 400
+
+
+        # Select features for scaling and prediction
+        features_for_scaling = data_copy[required_features]
+
+        # Scale the data
+        # The scaler was fitted on specific columns; ensure we scale the corresponding columns
+        scaled_data = scaler.transform(features_for_scaling)
+
+        # Predict the potability probabilities
+        # model.predict_proba returns shape (n_samples, n_classes)
+        # We usually want the probability of the positive class (e.g., class 1)
+        # Assuming class 1 is 'potable' and is the second column (index 1)
+        if hasattr(model, 'predict_proba'):
+            predicted_potability_proba = model.predict_proba(scaled_data)[:, 1] # Probability of class 1
+        elif hasattr(model, 'predict'):
+             # If model only has predict (e.g., SVC without probability=True), use predict
+             # Note: This gives 0 or 1, not a probability
+             predicted_potability_proba = model.predict(scaled_data)
+             # Convert to float for consistency if model predicts int
+             predicted_potability_proba = predicted_potability_proba.astype(float)
+        else:
+             return jsonify({"error": "Loaded model does not have predict_proba or predict method."}), 500
+
+
+        # Update the global DataFrame with the predicted potability probabilities
+        # Ensure the length matches. Should match since we're processing the whole dataframe.
+        if len(predicted_potability_proba) != len(recorded_data):
+             # This indicates a significant issue in data processing
+             print(f"Length mismatch: Predictions ({len(predicted_potability_proba)}) vs Data ({len(recorded_data)})")
+             return jsonify({"error": "Internal error: Length mismatch during prediction update."}), 500
+
+        recorded_data['predicted_potability'] = predicted_potability_proba
+
+        # Include the predicted potability (now probability) in the response
+        # Convert Timestamp to string for JSON serialization
+        response_data = recorded_data.copy()
+        response_data['Timestamp'] = response_data['Timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        return jsonify(response_data.to_dict(orient='records'))
+
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify(error=str(e))
+        error_trace = traceback.format_exc()
+        print(f"Error in /ml_model: {error_trace}")
+        return jsonify({'error': f'An internal server error occurred: {str(e)}', 'traceback': error_trace}), 500
 
 
 @api_bp.route('/forecast', methods=["POST"], strict_slashes=False)
 def forecast():
+    global recorded_data
+
     try:
-        global recorded_data # Make sure this DataFrame is populated and 'Timestamp' is datetime
-        
-        if not isinstance(recorded_data, pd.DataFrame) or recorded_data.empty:
+        if recorded_data is None or recorded_data.empty:
             return jsonify({"error": "No data available for forecasting. The 'recorded_data' DataFrame is empty or not initialized."}), 400
-        
-        if 'Timestamp' not in recorded_data.columns or not pd.api.types.is_datetime64_any_dtype(recorded_data['Timestamp']):
+
+        # Ensure Timestamp is datetime and set as index for time series analysis
+        # Make a copy to avoid modifying the global DataFrame's index persistently
+        forecast_data = recorded_data.copy()
+
+        if 'Timestamp' not in forecast_data.columns or not pd.api.types.is_datetime64_any_dtype(forecast_data['Timestamp']):
             return jsonify({"error": "Timestamp column is missing or not in datetime format in recorded_data."}), 400
 
-        if len(recorded_data) < 10:
-            return jsonify({"error": f"Not enough data for forecasting. Need at least 10 data points, got {len(recorded_data)}."}), 400
-        
+        # Use the Timestamp column as index
+        # Sort by Timestamp just in case
+        forecast_data = forecast_data.sort_values('Timestamp').set_index('Timestamp')
+
+        if len(forecast_data) < 10: # ARIMA needs a reasonable number of data points
+            return jsonify({"error": f"Not enough data for forecasting. Need at least 10 data points, got {len(forecast_data)}."}), 400
+
         forecast_periods = request.json.get('periods', 5)
         if not isinstance(forecast_periods, int) or forecast_periods <= 0:
             return jsonify({"error": "Invalid 'periods' value. Must be a positive integer."}), 400
 
         results_dict = {}
-        features_to_forecast = ['ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability']
-        
-        # Ensure all features exist in the dataframe
+        # Include temperature in forecasting
+        features_to_forecast = ['ph', 'Turbidity', 'Conductivity', 'temperature', 'predicted_potability'] # Added temperature
+
+        # Ensure all features exist
         for feature in features_to_forecast:
-            if feature not in recorded_data.columns:
-                return jsonify({"error": f"Feature '{feature}' not found in recorded data."}), 400
+            if feature not in forecast_data.columns:
+                 return jsonify({"error": f"Feature '{feature}' not found in recorded data."}), 400
 
         for feature in features_to_forecast:
-            series = recorded_data[feature].values
-            
+            series = forecast_data[feature] # Use the series directly
+
             # ARIMA model can fail with constant series or other issues.
             try:
-                # Using a simple order; consider auto_arima or specific orders per feature
-                model = ARIMA(series, order=(1,1,1), enforce_stationarity=False, enforce_invertibility=False)
-                print(f"Fitting ARIMA model for {feature}...")
-                model_fit = model.fit()
-                forecast_values = model_fit.forecast(steps=forecast_periods)
-                # ARIMA forecast returns a NumPy array. Convert to list of native Python floats.
-                # Convert to dictionary with string keys '0', '1', ...
-                results_dict[feature] = {str(i): float(val) for i, val in enumerate(forecast_values)}
-            except Exception as e:
-                print(f"Error fitting ARIMA for {feature}: {e}")
-                return jsonify({"error": f"Could not forecast {feature}. ARIMA model fitting failed: {str(e)}"}), 500
-        
-        # Generate future timestamps
-        # Timestamps should be in milliseconds since epoch for JavaScript Date compatibility
-        forecast_timestamps_ms = {}
-        if not recorded_data['Timestamp'].empty:
-            last_timestamp_dt = recorded_data['Timestamp'].iloc[-1] # This is a pandas Timestamp object
-            
-            avg_timedelta_seconds = 0
-            if len(recorded_data) > 1:
-                # Calculate average difference in seconds
-                time_diffs = recorded_data['Timestamp'].diff().dropna()
-                if not time_diffs.empty:
-                    avg_timedelta_seconds = time_diffs.mean().total_seconds()
-                else: # only one historical point after diff
-                    avg_timedelta_seconds = 20 # Default to 20s if only one diff possible or no diff
-            else: # only one historical point
-                avg_timedelta_seconds = 20 # Default to 20s if only one point
+                # Use a simple order (p,d,q). (1,1,1) is a common starting point.
+                # For robustness, especially with short or constant series, consider auto_arima
+                # or adding checks for constant/low variance series.
+                # ARIMA(0,0,0) is just a constant prediction (the mean)
+                if series.nunique() <= 1:
+                    # Handle constant series explicitly
+                    print(f"Feature '{feature}' is constant or has only one unique value. Forecasting mean.")
+                    forecast_values = np.full(forecast_periods, series.iloc[-1] if not series.empty else 0) # Forecast last value or 0 if empty
+                else:
+                    # Attempt ARIMA
+                    # Using suppress warnings as ARIMA fit can be noisy for simple models
+                    import warnings
+                    with warnings.catch_warnings():
+                         warnings.filterwarnings("ignore") # Ignore convergence warnings etc.
+                         model = ARIMA(series, order=(1,1,1), enforce_stationarity=False, enforce_invertibility=False)
+                         print(f"Fitting ARIMA model for {feature}...")
+                         model_fit = model.fit()
+                         forecast_values = model_fit.forecast(steps=forecast_periods)
 
-            if avg_timedelta_seconds <= 0: # Ensure positive timedelta
-                avg_timedelta_seconds = 20
+                # ARIMA forecast returns a NumPy array. Convert to list of native Python floats.
+                # Use a dictionary with string keys '0', '1', ...
+                results_dict[feature] = {str(i): float(val) for i, val in enumerate(forecast_values)}
+
+            except Exception as e:
+                # Log the specific error for the feature
+                print(f"Error fitting or forecasting ARIMA for {feature}: {e}")
+                # Indicate failure for this specific feature forecast
+                results_dict[feature] = {"error": f"Could not forecast {feature}: {str(e)}"}
+
+
+        # Generate future timestamps based on the last timestamp and average interval
+        forecast_timestamps_ms = {}
+        if not forecast_data.empty:
+            last_timestamp_dt = forecast_data.index[-1] # Get the last timestamp from the index
+
+            # Determine time interval
+            if len(forecast_data) > 1:
+                 # Calculate the difference between the last two timestamps as the interval
+                 time_interval = forecast_data.index[-1] - forecast_data.index[-2]
+                 # If interval is zero (duplicate timestamps), default to a small value
+                 if time_interval.total_seconds() <= 0:
+                     print("Warning: Duplicate or non-increasing timestamps found. Using 1-day interval.")
+                     time_interval = timedelta(days=1) # Default to 1 day if interval is zero or negative
+            else:
+                 # If only one data point, default to a reasonable interval (e.g., 1 day)
+                 print("Warning: Only one data point available. Using 1-day interval for forecast timestamps.")
+                 time_interval = timedelta(days=1) # Default to 1 day if only one point
 
 
             for i in range(forecast_periods):
-                # Calculate next timestamp by adding average timedelta
-                next_timestamp_dt = last_timestamp_dt + timedelta(seconds=(i + 1) * avg_timedelta_seconds)
-                # Convert to milliseconds since epoch
+                # Calculate next timestamp by adding the determined interval
+                next_timestamp_dt = last_timestamp_dt + (i + 1) * time_interval
+                # Convert to milliseconds since epoch for JavaScript Date compatibility
                 forecast_timestamps_ms[str(i)] = int(next_timestamp_dt.timestamp() * 1000)
         else:
-             # Fallback if somehow timestamps are empty (should have been caught earlier)
-            current_time_ms = int(pd.Timestamp.now().timestamp() * 1000)
+             # Fallback if somehow forecast_data is empty (should have been caught earlier)
+            print("Warning: No data available to generate forecast timestamps.")
+            current_time_ms = int(datetime.now().timestamp() * 1000)
             for i in range(forecast_periods):
-                forecast_timestamps_ms[str(i)] = current_time_ms + (i + 1) * 20000 # Default to 20s interval
+                # Default timestamp interval (e.g., 1 day = 86400000 ms)
+                forecast_timestamps_ms[str(i)] = current_time_ms + (i + 1) * 86400000
+
 
         results_dict['timestamps'] = forecast_timestamps_ms
-        
+
         return jsonify(results_dict)
 
     except Exception as e:
-        print(f"An unexpected error occurred in /forecast: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"An internal server error occurred: {str(e)}"}), 500
+        error_trace = traceback.format_exc()
+        print(f"An unexpected error occurred in /forecast: {error_trace}")
+        return jsonify({"error": f"An internal server error occurred: {str(e)}", "traceback": error_trace}), 500
 
 @api_bp.route('/get_data', methods=['GET'], strict_slashes=False)
 def get_data():
+    global recorded_data # Access the global variable
+
     try:
+        if recorded_data is None or recorded_data.empty:
+             return jsonify([]), 200 # Return empty list if no data
+
+        # Make a copy and convert Timestamp to string for JSON serialization
+        data_copy = recorded_data.copy()
+        # Check if Timestamp column exists and is datetime-like before formatting
+        if 'Timestamp' in data_copy.columns and pd.api.types.is_datetime64_any_dtype(data_copy['Timestamp']):
+             data_copy['Timestamp'] = data_copy['Timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        # else: Timestamp is already in a JSON-serializable format or not present, do nothing
+
         # Convert the DataFrame to a list of dictionaries
-        data = recorded_data.to_dict(orient='records')
-        
+        data = data_copy.to_dict(orient='records')
+
         # Return the data as JSON
         return jsonify(data)
-    
+
     except Exception as e:
-        return jsonify(error=str(e))
+        error_trace = traceback.format_exc()
+        print(f"Error in /get_data: {error_trace}")
+        # Corrected the return statement in the except block
+        return jsonify({'error': f'An internal server error occurred: {str(e)}', 'traceback': error_trace}), 500
